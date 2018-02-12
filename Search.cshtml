@@ -1,0 +1,232 @@
+﻿@using ContentModels = Umbraco.Web.PublishedContentModels;
+@inherits Umbraco.Web.Mvc.UmbracoTemplatePage<IPublishedContent>
+@inherits Umbraco.Web.Mvc.UmbracoTemplatePage
+@{
+    Layout = "~/Views/Shared/_LayoutNavSelfhelp.cshtml";
+}
+
+@{
+    ViewBag.Title = "Self Help";
+}
+
+
+<script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+<script>
+    $(document).ready(function () {
+        $(".footer-wrapper").css({ 'background-color': 'rgba(242,243,245,1)'});
+    });
+</script>
+<script type="text/javascript">
+  var cmspath = '@System.Configuration.ConfigurationManager.AppSettings["cmspath"]';
+        $(function () {
+
+            $("#searchTerm").autocomplete({
+                source: function (request, response) {
+
+                    // console.log("/search_JSON?searchTerm="+$('#searchTerm').val());
+                    $.ajax({
+                        url: cmspath + "/search_JSON?searchTerm=" + $('#searchTerm').val(),
+                        dataType: "json",
+                        //contentType: "application/json",
+                        data: {},
+                        success: function (data) {
+                            response(data);
+                            //console.log(data);
+                        },
+                        error: function (jqXHR, exception) {
+                            //console.log(jqXHR);
+                        }
+                    });
+                },
+                minLength: 1,
+                select: function (event, ui) {
+                    //Redirect user when item selected from the id in the JSON
+                    //window.location.href = ui.item.id;
+                    $("#searchTerm").val(ui.item.label);
+                },
+                appendTo: "#container"
+            });
+        });
+</script>
+<div class="self_search">
+    <h1 class="self_hlp_hdng over_selfhdng">Self Help</h1>
+    <div _ngcontent-pnn-40="" class="component-wrapper card setup-account shd_box2 shd_3 self_fixer">
+        <div _ngcontent-pnn-40="" class="card-content abt_step2">
+            <form action="~/search/" method="GET">
+                <section style="text-align:center">
+                    <input type="text" placeholder="Search..." name="searchTerm" id="searchTerm" class="search">
+                    @*<button  style="font-size:15pt;color:white;
+                        class="Rectangle-529">Search</button>*@
+                    <button type="submit" class="Ellipse-1 Disagreed search_btn">Search</button>
+                    <div id="container" class="auto-c-container">
+                    </div>
+                </section>
+
+            </form>
+        </div>
+    </div>
+
+    @{
+        var searchQuery = Request.Unvalidated.QueryString["searchTerm"];
+        var link = searchQuery;
+        var results = new Umbraco.Web.Models.DynamicPublishedContentList();
+        var specialChars = new string[] { "*", "(", ")", "?", "!", "&", "%", "^", "@", "$", "#", ">", "<", "[", "]", "/", "-", "+", "~", ":", "|", "{", "}", "=", "_", "'", ";", ",", ".", "`", "\"" };
+
+        dynamic data = null;
+        if (!string.IsNullOrEmpty(searchQuery))
+        {
+            searchQuery = searchQuery.Trim();
+            specialChars.ToList().ForEach(x => searchQuery = searchQuery.Replace(x, ""));
+            //searchQuery = searchQuery.Replace("*", "").Replace("(", "").Replace(")", "").Replace("?", "").Replace("!", "").Replace("&", "").Replace("%", "").Replace("^", "").Replace("@", "").Replace("$", "").Replace("#", "").Replace(">", "").Replace("<", "").Replace("[", "").Replace("]", "").Replace("/", "").Replace("-", "").Replace("+", "").Replace("~", "").Replace(":", "").Replace("|", "").Replace("{", "").Replace("}", "").Replace("=", "").Replace("_", "").Replace("'", "").Replace(";", "").Replace(",", "").Replace(".", "").Replace("`", "").Replace("\"", "").Trim();
+
+
+            if (ExamineManager.Instance.SearchProviderCollection.Count > 0 && ExamineManager.Instance.SearchProviderCollection["ExternalSearcher"] != null)
+            {
+                var criteria = ExamineManager.Instance.SearchProviderCollection["ExternalSearcher"].CreateSearchCriteria(Examine.SearchCriteria.BooleanOperation.Or);
+                Examine.SearchCriteria.IBooleanOperation filter = null;
+                foreach (string key in searchQuery.Split(' ')) {
+                    if(filter == null) {
+                        filter = criteria.GroupedOr(new string[] { "nodeName", "name", "category", "tags", "shortVersion", "longVersion" }, key);
+                    }
+                    else {
+                        filter = filter.Or().GroupedOr(new string[] { "nodeName", "name", "category", "tags", "shortVersion", "longVersion" }, key);
+                    }
+                    //var filter = criteria.GroupedNot(new string[] { "createdby" }, searchQuery).Compile();
+
+                }
+                data = !string.IsNullOrEmpty(searchQuery) ? Umbraco.Content("1379").Search(criteria) : null;
+            }
+            else
+            {
+                data = !string.IsNullOrEmpty(searchQuery) ? Umbraco.Content("1379").Search(searchQuery) : null;
+            }
+        }
+        if (data != null)
+        {
+            //searching at topic
+            //var question = ((Umbraco.Web.Models.DynamicPublishedContentList)data).Where(x => x.Level == 4).ToList();
+            var childdata = ((Umbraco.Web.Models.DynamicPublishedContentList)data).Where(x => x.GetProperty("markAsQuestion") != null && (bool)x.GetProperty("markAsQuestion").Value).ToList();
+            if (childdata == null || childdata.Count <= 0)
+            {
+                //searching at topic
+                foreach (var item in ((Umbraco.Web.Models.DynamicPublishedContentList)data).ToList())
+                {
+                    //data = item.Children;
+                    childdata = item.Children.Where(x => x.GetProperty("markAsQuestion") != null && (bool)x.GetProperty("markAsQuestion").Value).ToList();
+                    if (childdata == null || childdata.Count <= 0)
+                    {
+                        foreach (var s in ((Umbraco.Web.Models.DynamicPublishedContentList)item.Children))
+                        {
+                            foreach (var c in s.Children)
+                            {
+                                if (!results.Contains(c)) { results.Add(c); }
+
+                            }
+                        };
+                    }
+                    else
+                    {
+                        foreach (var c in item.Children)
+                        {
+                            if (!results.Contains(c)) { results.Add(c); }
+                        }
+                    }
+                }
+
+            }
+            else
+            {
+                foreach (var c in childdata)
+                {
+                    if (!results.Contains(c)) { results.Add(c); }
+                }
+            }
+        }
+    }
+
+
+    <div class="searchresults">
+        @if (results == null || results.ToList().Count <= 0)
+            {
+                if (!string.IsNullOrEmpty(searchQuery) || !string.IsNullOrEmpty(link))
+                {
+                <div _ngcontent-pnn-40="" class="component-wrapper card setup-account shd_box2 shd_3 self_fixer">
+                    <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                        <p>No results for: <strong><b>@link</b></strong></p>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+
+            <div _ngcontent-pnn-40="" class="component-wrapper card setup-account shd_box2 shd_3 self_fixer">
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                    <div class="serch_para">
+                        <p>Your search results for : <strong><b class="add_spc">@link</b></strong></p>
+                    </div>
+                </div>
+            </div>
+            <div _ngcontent-pnn-40="" class="component-wrapper card setup-account shd_box2 shd_3 self_fixer">
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                    <div class="space_serch">
+                        <ul>
+                            @foreach (var result in results)
+                {
+                    if (!string.IsNullOrEmpty(result.Name))
+                    {
+                                    <li class=''>
+                                        <h2> <a href='@result.Url'>@result.Name</a></h2>
+                                        <div class="selfhelp-shortanswer">
+                                            <h2></h2>
+
+                                            @if (!string.IsNullOrEmpty(@Umbraco.Field(result, "shortVersion").ToString()))
+                                            {
+                                                <div class="selfhelp-shortanswer">
+
+                                                    <p>
+                                                        @Umbraco.Field(result, "shortVersion")
+                                                        <br />
+                                                        <a href="@result.Url" class="read_more"><br />Read More</a>
+                                                    </p>
+                                                </div>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            }
+
+                        </ul>
+                    </div>
+
+                </div>
+            </div>
+        }
+    </div>
+
+    <content style="text-align:center" class="cta-container">
+        <div _ngcontent-pnn-40="" class="component-wrapper card setup-account shd_box2 shd_3 self_fixer">
+            <div class="selfhelp_contact_center">
+                <div _ngcontent-pnn-40="" class="card-content abt_step2"><a href="~/cform"><b style="font-size:15pt;color:#008488;">Contact Us</b>:</a></div>
+
+                <br />
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">Can't find what you are looking for?</div>
+                <br />
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                    If your question isn't here, contact OSBC on
+
+                    <a href='mailto:we.assist@smallbusiness.nsw.gov.au?Subject=@Request.Url.Query.ToString().Replace('+',' ').Replace('?',' ')'><b> we.assist@smallbusiness.nsw.gov.au</b></a> or call <b>1300 795 534</b> or
+                </div>
+
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                    <b>(02) 8222 4800</b> with your preferred method of contact, hours and phone numbers if applicable.
+                </div>
+
+                <div _ngcontent-pnn-40="" class="card-content abt_step2">
+                    To provide feedback on any OSBC services, please visit the
+                    <a href="~/feedbackform/"><b>Feedback</b></a> page.
+                </div>
+            </div>
+        </div>
+    </content>
+</div>
